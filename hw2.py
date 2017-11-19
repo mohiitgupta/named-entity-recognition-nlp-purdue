@@ -219,9 +219,10 @@ def main():
     # loss_function = nn.MSELoss(size_average=False)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.3)
+    print "using loss function ", loss_function, " and optimizer ", optimizer
     # optimizer = optim.Adam(model.parameters(), lr=0.03)
 
-    for epoch in range(3):
+    for epoch in range(5):
         epoch_loss = 0
         for sentence, labels in zip(train_lex, train_y):
     #         flag = bool(random.getrandbits(1))
