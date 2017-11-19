@@ -111,28 +111,55 @@ def get_input_vector(word_embeddings, prev_label, word):
     return input_vector
 
 def viterbi_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
-        dp = np.zeros((NUM_LABELS, len(sentence)))
-        back_pointers = np.zeros((len(sentence), NUM_LABELS))
+        dp = np.zeros((NUM_LABELS, len(sentence)+1))
+        back_pointers = np.zeros((NUM_LABELS, len(sentence)))
         dp[0][0] = 1
         for i in range(len(sentence)):
-            max_vector = []
-            back_point_vector = []
-            word_feature = autograd.Variable(word_embeddings[sentence[i]])
             word_table = np.zeros((NUM_LABELS, NUM_LABELS))
-
-            prev_label =  tag_embeddings[NUM_LABELS]
+            if i == 0:
+                input_vector = get_input_vector(word_embeddings, tag_embeddings[NUM_LABELS], sentence[i])
+                probs = model(input_vector)
+                probs = probs.data.numpy()
+                word_table[:,0] = np.multiply(dp[0][0], probs)
+                dp[:,i+1] = word_table[:,0]
+                back_pointers[:,i] = 128
+                continue
             for j in range(NUM_LABELS):
-                prev_label = autograd.Variable(prev_label)
-                input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
+                input_vector = get_input_vector(word_embeddings, tag_embeddings[j], sentence[i])
                 probs = model(input_vector)
                 probs = probs.data.numpy()
 #                 print " probs ", probs
 #                 print "dp array ", dp[:,i]
 #                 print np.multiply(dp[:, i], probs)
-                word_table[:,j] = np.multiply(dp[:, i],probs)
-                prev_label = tag_embeddings[j]
-            print "word table is ", word_table
+                word_table[:,j] = np.multiply(dp[:, i], probs)
+#             print "word table is ", word_table
             dp[:,i+1] = word_table.max(1)
+            for k in range(NUM_LABELS):
+                for index, element in enumerate(word_table[k]):
+                    if element == dp[k, i+1]:
+                        back_pointers[k, i] = index
+#                 back_pointers[k, i] = word_table[k].index(dp[k,i+1])
+
+#         print "back_pointers ", back_pointers
+#         print "dp matrix ", dp[0]
+        output_labels = np.zeros(len(sentence), dtype = np.int)
+        label_index = len(sentence) - 1
+        max_val = dp[:, len(sentence)].max()
+        for index, element in enumerate(dp[:, len(sentence)]):
+            if element == max_val:
+                output_labels[label_index] = index
+#                 print "debug2 ", index
+                break
+#         print "output labels ", output_labels
+        for i in range(len(sentence)-1, 0, -1):
+#             print "debug ", output_labels[label_index]
+            row = back_pointers[output_labels[label_index], i]
+            label_index -= 1
+            output_labels[label_index] = row
+#         print "output labels ", output_labels
+        return output_labels
+
+
 
 def greedy_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
     output_labels = np.zeros(len(sentence))
@@ -219,10 +246,10 @@ def main():
     # loss_function = nn.MSELoss(size_average=False)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.3)
-    print "using loss function ", loss_function, " and optimizer ", optimizer
+    print "using loss function ", loss_function, " and optimizer ", optimizer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
     # optimizer = optim.Adam(model.parameters(), lr=0.03)
 
-    for epoch in range(5):
+    for epoch in range(3):
         epoch_loss = 0
         for sentence, labels in zip(train_lex, train_y):
     #         flag = bool(random.getrandbits(1))
@@ -260,7 +287,7 @@ def main():
     how to get f1 score using my functions, you can use it in the validation and training as well
     '''
     predictions_test = [ map(lambda t: idx2label[t], 
-                             greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) 
+                             viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) 
                         for x in test_lex ]
     groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
     words_test = [ map(lambda t: idx2word[t], w) for w in test_lex ]
