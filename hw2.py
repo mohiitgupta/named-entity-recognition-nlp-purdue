@@ -104,12 +104,19 @@ class MyNNClassifier(Classifier):
         pass
 
 
-def viterbi_inference(test_lex, model, word_embeddings, tag_embeddings, NUM_LABELS):
-    for sentence in test_lex:
+def get_input_vector(word_embeddings, prev_label, word):
+    word_feature = autograd.Variable(word_embeddings[word])
+    prev_label = autograd.Variable(prev_label)
+    input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
+    return input_vector
+
+def viterbi_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
         dp = np.zeros((NUM_LABELS, len(sentence)))
         back_pointers = np.zeros((len(sentence), NUM_LABELS))
         dp[0][0] = 1
         for i in range(len(sentence)):
+            max_vector = []
+            back_point_vector = []
             word_feature = autograd.Variable(word_embeddings[sentence[i]])
             word_table = np.zeros((NUM_LABELS, NUM_LABELS))
 
@@ -117,14 +124,29 @@ def viterbi_inference(test_lex, model, word_embeddings, tag_embeddings, NUM_LABE
             for j in range(NUM_LABELS):
                 prev_label = autograd.Variable(prev_label)
                 input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
-                log_probs = model(input_vector)
-                print "log probs ", log_probs
-                print "dp array ", dp[:,i]
-                print tf.multiply(dp[:,i],log_probs)
-                word_table[:,j] = np.multiply(dp[i],log_probs)
+                probs = model(input_vector)
+                probs = probs.data.numpy()
+#                 print " probs ", probs
+#                 print "dp array ", dp[:,i]
+#                 print np.multiply(dp[:, i], probs)
+                word_table[:,j] = np.multiply(dp[:, i],probs)
                 prev_label = tag_embeddings[j]
             print "word table is ", word_table
-        break
+            dp[:,i+1] = word_table.max(1)
+
+def greedy_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
+    output_labels = np.zeros(len(sentence))
+    prev_label = tag_embeddings[NUM_LABELS]
+    for i, word in enumerate(sentence):
+        input_vector =  get_input_vector(word_embeddings, prev_label, word)
+        probs = model(input_vector)
+        max_val, predicted_label = torch.max(probs, 1)
+        predicted_label = predicted_label.data[0]
+        prev_label = tag_embeddings[predicted_label]
+        output_labels[i] = predicted_label
+    return output_labels
+
+
 
 
 class NeuralNet(nn.Module):  # inheriting from nn.Module!
@@ -182,8 +204,9 @@ def main():
     '''
     NUM_LABELS = len(idx2label)
     VOCAB_SIZE = len(idx2word)
-    HIDDEN_NODES = 20
-    word_embeddings = torch.rand(VOCAB_SIZE, 100)
+    HIDDEN_NODES = 150
+    # word_embeddings = torch.rand(VOCAB_SIZE, 300)
+    word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
     # tag_embeddings = torch.rand(NUM_LABELS+1, 100)
     tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
     NUM_INPUT_NODES = len(word_embeddings[0]) + len(tag_embeddings[0])
@@ -198,35 +221,36 @@ def main():
     optimizer = optim.SGD(model.parameters(), lr=0.3)
     # optimizer = optim.Adam(model.parameters(), lr=0.03)
 
-    for epoch in range(1):
+    for epoch in range(3):
         epoch_loss = 0
         for sentence, labels in zip(train_lex, train_y):
-            flag = bool(random.getrandbits(1))
-            if flag:
-                continue
+    #         flag = bool(random.getrandbits(1))
+    #         if flag:
+    #             continue
             prev_label = tag_embeddings[NUM_LABELS]
             for word, label in zip(sentence, labels):
                 model.zero_grad()
                 word_feature = autograd.Variable(word_embeddings[word])
                 prev_label = autograd.Variable(prev_label)
                 input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
-                 
+
                 prev_label = tag_embeddings[label]
                 # input_vector = autograd.Variable(concat_vec)
                 # print "input vector ", input_vector
-                target = autograd.Variable(make_target(label, NUM_LABELS))
-                # print "target ", target
-
-                log_probs = model(input_vector)
-                # print "log probs ", log_probs
-                loss = loss_function(log_probs, target)
+                label_tensor = torch.LongTensor([label.item()])
+                target = autograd.Variable(label_tensor)
+    #             target = autograd.Variable(make_target(label, NUM_LABELS))
+                probs = model(input_vector)
+    #             print "probs ", log_probs
+    #             print "target ", target
+                loss = loss_function(probs, target)
                 epoch_loss += loss.data[0]
-                # print "epoch_loss ", epoch_loss 
+    #             print "loss ", loss 
                 loss.backward()
                 optimizer.step()
         print "epoch number ", epoch, " epoch_loss ", epoch_loss
 
-    viterbi_inference(test_lex, model, word_embeddings, tag_embeddings, NUM_LABELS)
+    # viterbi_inference(test_lex, model, word_embeddings, tag_embeddings, NUM_LABELS)
 
 
 
@@ -234,7 +258,9 @@ def main():
     '''
     how to get f1 score using my functions, you can use it in the validation and training as well
     '''
-    predictions_test = [ map(lambda t: idx2label[t], myrnn.inference(x)) for x in test_lex ]
+    predictions_test = [ map(lambda t: idx2label[t], 
+                             greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) 
+                        for x in test_lex ]
     groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
     words_test = [ map(lambda t: idx2word[t], w) for w in test_lex ]
     test_precision, test_recall, test_f1score = conlleval(predictions_test, groundtruth_test, words_test)
