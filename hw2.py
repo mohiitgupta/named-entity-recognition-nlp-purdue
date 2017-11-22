@@ -245,18 +245,18 @@ def main():
     implement you training loop here
     #Note : Takes around 1 hour to train the model with 1500 epochs and final MSE loss of around 0.0009
     '''
-    # word_embeddings = torch.rand(VOCAB_SIZE, 300)
+    word_embeddings = torch.rand(VOCAB_SIZE, 300)
     # word_embeddings = torch.load('word_embeddings.pt')
-    # #     word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
-    # tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
-    # model = myNNClassifier.train(word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
+    #     word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
+    tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
+    model = myNNClassifier.train(word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
 
     #for using pretrained model
-    word_embeddings = torch.load('word_embeddings.pt')
-    # word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
-    tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
-    model = NeuralNet(428, 1000, NUM_LABELS) 
-    model.load_state_dict(torch.load('parameters.pt'))
+    # word_embeddings = torch.load('word_embeddings.pt')
+    # # word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
+    # tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
+    # model = NeuralNet(428, 1000, NUM_LABELS) 
+    # model.load_state_dict(torch.load('parameters.pt'))
     # print "model ", model.state_dict()
 
     '''
