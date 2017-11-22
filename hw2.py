@@ -73,44 +73,112 @@ def get_perf(filename):
 
     return (precision, recall, f1score)
 
+def create_embedding_matrix(word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE):
+    word_embedding_list = []
+    label_list = []
+    
+    for sentence, labels in zip(train_lex, train_y):
+        prev_label = tag_embeddings[NUM_LABELS]
+        for word, label in zip(sentence, labels):
+            word_embedding = word_embeddings[word]
+            input_vector = torch.cat((word_embedding.view(1,-1), prev_label.view(1,-1)), 1)
+            word_embedding_list.append(input_vector)
+            prev_label = tag_embeddings[label]
+            # for mse loss
+            label_tensor = torch.LongTensor(NUM_LABELS).zero_().view(1,-1)
+            label_tensor[0,label] = 1
+            label_tensor = label_tensor.float()
+            label_list.append(label_tensor)
+            
+            # for cross entropy loss since multi target not supported
+            # label_tensor = torch.LongTensor([label.item()])
+            # label_tensor = label_tensor.long()
+            # label_list.append(label_tensor)
+    print "word embedding list ", len(word_embedding_list)
+    print "label list ", len(label_list)
+    return word_embedding_list, label_list
 
+def get_input_vector(word_embeddings, prev_label, word):
+    word_embedding = word_embeddings[word]
+    word_feature = autograd.Variable(word_embeddings[word])
+    prev_label = autograd.Variable(prev_label)
+    input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
+    # print "input vector ", input_vector
+    return input_vector
 
+class NeuralNet(nn.Module):  # inheriting from nn.Module!
 
+    def __init__(self, num_input_nodes, num_hidden_nodes, output_dimension):
+        super(NeuralNet, self).__init__()
+        self.input_linear = nn.Linear(num_input_nodes, num_hidden_nodes)
+        self.output_linear = nn.Linear(num_hidden_nodes, output_dimension)
 
-
-
-
-
-
-
-def make_target(label, size):
-    # print "label is ", label
-    tensor = torch.zeros(size)
-    tensor = tensor.long()
-    tensor[label] = 1
-    # print "tensor is ", tensor
-    return tensor.view(1,-1)
-    # return torch.LongTensor([label.tolist()])
-
+    def forward(self, input_vector):
+        out = self.input_linear(input_vector)
+        out = F.tanh(out)
+        out = self.output_linear(out)
+        out = F.softmax(out)
+        return out
 
 class MyNNClassifier(Classifier):
     def __init__(self):
         pass
 
-    def train(self):
-        pass
+    def train(self, word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE):
+        word_embedding_list, label_list = create_embedding_matrix(word_embeddings,
+         tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
+        HIDDEN_NODES = 1000
+        word_embedding_list = torch.stack(word_embedding_list)
+        word_embedding_list = torch.squeeze(word_embedding_list)
+        label_list = torch.stack(label_list)
+        label_list = torch.squeeze(label_list)
+        NUM_INPUT_NODES = word_embedding_list[0].size()[0]
+        print "number of input nodes ", NUM_INPUT_NODES
+        print "word_embeddings ", word_embedding_list.size()
+        print "label list ", label_list.size()
+
+        model = NeuralNet(NUM_INPUT_NODES, HIDDEN_NODES, NUM_LABELS)
+        loss_function = nn.MSELoss()
+        # loss_function = nn.CrossEntropyLoss()
+        # optimizer = optim.SGD(model.parameters(), lr=0.1
+        # #                       , momentum=0.9
+        #                      )
+        words = autograd.Variable(word_embedding_list)
+        label = autograd.Variable(label_list
+                                  , requires_grad=False
+                         )
+        optimizer = optim.Adam(model.parameters(), lr=0.0005)
+        for epoch in range(1000):
+            probs = model(words)
+            loss = loss_function(probs, label)
+            print "loss ", loss.data[0], " epoch ", epoch
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        torch.save(model.state_dict(), 'parameters.pt')
+        torch.save(word_embeddings, 'word_embeddings.pt')
+        return model
 
     def inference(self):
         pass
 
+    def greedy_inference(self, model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
+        output_labels = np.zeros(len(sentence))
+        prev_label = tag_embeddings[NUM_LABELS]
+        # prob_list = []
+        for i, word in enumerate(sentence):
+            input_vector =  get_input_vector(word_embeddings, prev_label, word)
+            probs = model(input_vector)
+            # prob_list.append(probs)
+            max_val, predicted_label = torch.max(probs, 1)
+            predicted_label = predicted_label.data[0]
+            prev_label = tag_embeddings[predicted_label]
+            output_labels[i] = predicted_label
+        # print output_labels
+        return output_labels
 
-def get_input_vector(word_embeddings, prev_label, word):
-    word_feature = autograd.Variable(word_embeddings[word])
-    prev_label = autograd.Variable(prev_label)
-    input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
-    return input_vector
-
-def viterbi_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
+    def viterbi_inference(self, model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
         dp = np.zeros((NUM_LABELS, len(sentence)+1))
         back_pointers = np.zeros((NUM_LABELS, len(sentence)))
         dp[0][0] = 1
@@ -120,7 +188,7 @@ def viterbi_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABE
                 input_vector = get_input_vector(word_embeddings, tag_embeddings[NUM_LABELS], sentence[i])
                 probs = model(input_vector)
                 probs = probs.data.numpy()
-                word_table[:,0] = np.multiply(dp[0][0], probs)
+                word_table[:,0] = np.multiply(dp[0, 0], probs)
                 dp[:,i+1] = word_table[:,0]
                 back_pointers[:,i] = 128
                 continue
@@ -128,68 +196,24 @@ def viterbi_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABE
                 input_vector = get_input_vector(word_embeddings, tag_embeddings[j], sentence[i])
                 probs = model(input_vector)
                 probs = probs.data.numpy()
-#                 print " probs ", probs
-#                 print "dp array ", dp[:,i]
-#                 print np.multiply(dp[:, i], probs)
-                word_table[:,j] = np.multiply(dp[:, i], probs)
-#             print "word table is ", word_table
+                word_table[:,j] = np.multiply(dp[j, i], probs)
             dp[:,i+1] = word_table.max(1)
             for k in range(NUM_LABELS):
                 for index, element in enumerate(word_table[k]):
                     if element == dp[k, i+1]:
                         back_pointers[k, i] = index
-#                 back_pointers[k, i] = word_table[k].index(dp[k,i+1])
-
-#         print "back_pointers ", back_pointers
-#         print "dp matrix ", dp[0]
         output_labels = np.zeros(len(sentence), dtype = np.int)
         label_index = len(sentence) - 1
         max_val = dp[:, len(sentence)].max()
         for index, element in enumerate(dp[:, len(sentence)]):
             if element == max_val:
                 output_labels[label_index] = index
-#                 print "debug2 ", index
                 break
-#         print "output labels ", output_labels
-        for i in range(len(sentence)-1, 0, -1):
-#             print "debug ", output_labels[label_index]
+        for i in range(len(sentence)-1, 0, -1): #for example 18 to 1
             row = back_pointers[output_labels[label_index], i]
             label_index -= 1
             output_labels[label_index] = row
-#         print "output labels ", output_labels
         return output_labels
-
-
-
-def greedy_inference(model, sentence, word_embeddings, tag_embeddings, NUM_LABELS):
-    output_labels = np.zeros(len(sentence))
-    prev_label = tag_embeddings[NUM_LABELS]
-    for i, word in enumerate(sentence):
-        input_vector =  get_input_vector(word_embeddings, prev_label, word)
-        probs = model(input_vector)
-        max_val, predicted_label = torch.max(probs, 1)
-        predicted_label = predicted_label.data[0]
-        prev_label = tag_embeddings[predicted_label]
-        output_labels[i] = predicted_label
-    return output_labels
-
-
-
-
-class NeuralNet(nn.Module):  # inheriting from nn.Module!
-
-    def __init__(self, num_input_nodes, num_hidden_nodes, output_dimension):
-        super(NeuralNet, self).__init__()
-        self.input_linear = nn.Linear(num_input_nodes, num_hidden_nodes)
-        self.middle_linear = nn.ReLU()
-        self.output_linear = nn.Linear(num_hidden_nodes, output_dimension)
-
-    def forward(self, input_vector):
-        out = self.input_linear(input_vector)
-        h_relu = self.middle_linear(out)
-        y_pred = self.output_linear(h_relu)
-        # return F.log_softmax(y_pred)
-        return y_pred
 
 def main():
 
@@ -202,99 +226,67 @@ def main():
     f = gzip.open(filename,'rb')
     train_set, valid_set, test_set, dicts = cPickle.load(f)
 
-    # print "train_set ", train_set
-
     train_lex, _, train_y = train_set
     valid_lex, _, valid_y = valid_set
     test_lex,  _,  test_y  = test_set
 
-    # print "train_lex ", train_lex
-    # print "train_y ", train_y
-
     idx2label = dict((k,v) for v,k in dicts['labels2idx'].iteritems())
     idx2word  = dict((k,v) for v,k in dicts['words2idx'].iteritems())
 
+    VOCAB_SIZE = len(idx2word)
+    NUM_LABELS = len(idx2label)
     '''
     To have a look what the original data look like, commnet them before your submission
     '''
-    print "length train data ", len(train_lex), " ", len(train_y)
-    # print "test lex ", test_lex[0]
-    # print "word dictionary is ", idx2word
-    # print "label dictionary is ", idx2label
-    # print train_lex[0], map(lambda t: idx2word[t], train_lex[0])
-    # print train_y[0], map(lambda t: idx2label[t], train_y[0])
-    # print test_lex[0], map(lambda t: idx2word[t], test_lex[0])
-    # print test_y[0], map(lambda t: idx2label[t], test_y[0])
+    #initialize myNNClassifier object
+    myNNClassifier = MyNNClassifier()
 
     '''
     implement you training loop here
+    #Note : Takes around 1 hour to train the model with 1500 epochs and final MSE loss of around 0.0009
     '''
-    NUM_LABELS = len(idx2label)
-    VOCAB_SIZE = len(idx2word)
-    HIDDEN_NODES = 150
     # word_embeddings = torch.rand(VOCAB_SIZE, 300)
-    word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
-    # tag_embeddings = torch.rand(NUM_LABELS+1, 100)
+    # word_embeddings = torch.load('word_embeddings.pt')
+    # #     word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
+    # tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
+    # model = myNNClassifier.train(word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
+
+    #for using pretrained model
+    word_embeddings = torch.load('word_embeddings.pt')
+    # word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
     tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
-    NUM_INPUT_NODES = len(word_embeddings[0]) + len(tag_embeddings[0])
-    # print "number of input nodes ", NUM_INPUT_NODES
-    # print "word_embeddings ", word_embeddings
-    # print "tag_embeddings ", tag_embeddings
-    # input dimension for neural network is concatenation of word and tag tensors
-    model = NeuralNet(NUM_INPUT_NODES, HIDDEN_NODES, NUM_LABELS)
-
-    # loss_function = nn.MSELoss(size_average=False)
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.3)
-    print "using loss function ", loss_function, " and optimizer ", optimizer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-    # optimizer = optim.Adam(model.parameters(), lr=0.03)
-
-    for epoch in range(3):
-        epoch_loss = 0
-        for sentence, labels in zip(train_lex, train_y):
-    #         flag = bool(random.getrandbits(1))
-    #         if flag:
-    #             continue
-            prev_label = tag_embeddings[NUM_LABELS]
-            for word, label in zip(sentence, labels):
-                model.zero_grad()
-                word_feature = autograd.Variable(word_embeddings[word])
-                prev_label = autograd.Variable(prev_label)
-                input_vector = torch.cat((word_feature.view(1,-1), prev_label.view(1,-1)), 1)
-
-                prev_label = tag_embeddings[label]
-                # input_vector = autograd.Variable(concat_vec)
-                # print "input vector ", input_vector
-                label_tensor = torch.LongTensor([label.item()])
-                target = autograd.Variable(label_tensor)
-    #             target = autograd.Variable(make_target(label, NUM_LABELS))
-                probs = model(input_vector)
-    #             print "probs ", log_probs
-    #             print "target ", target
-                loss = loss_function(probs, target)
-                epoch_loss += loss.data[0]
-    #             print "loss ", loss 
-                loss.backward()
-                optimizer.step()
-        print "epoch number ", epoch, " epoch_loss ", epoch_loss
-
-    # viterbi_inference(test_lex, model, word_embeddings, tag_embeddings, NUM_LABELS)
-
-
-
+    model = NeuralNet(428, 1000, NUM_LABELS) 
+    model.load_state_dict(torch.load('parameters.pt'))
+    # print "model ", model.state_dict()
 
     '''
     how to get f1 score using my functions, you can use it in the validation and training as well
     '''
-    predictions_test = [ map(lambda t: idx2label[t], 
-                             viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) 
-                        for x in test_lex ]
+    # predictions_train = [ map(lambda t: idx2label[t],
+    #  greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in train_lex]
+    # groundtruth_train = [ map(lambda t: idx2label[t], y) for y in train_y ]
+    # words_train = [ map(lambda t: idx2word[t], w) for w in train_lex ]
+    # train_precision, train_recall, train_f1score = conlleval(predictions_train, groundtruth_train, words_train)
+    # print "Training results ", train_precision, train_recall, train_f1score
+
+
+    predictions_valid = [ map(lambda t: idx2label[t],
+     myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in valid_lex]
+    # print "predictions ", predictions_valid[0]
+    groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
+    # print "groundtruth ", groundtruth_valid[0]
+    words_valid = [ map(lambda t: idx2word[t], w) for w in valid_lex ]
+    valid_precision, valid_recall, valid_f1score = conlleval(predictions_valid, groundtruth_valid, words_valid)
+    print "Validation results ", valid_precision, valid_recall, valid_f1score
+
+    predictions_test = [ map(lambda t: idx2label[t],
+     myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in test_lex]
+    # print "predictions ", predictions_test[0]
     groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
+    # print "groundtruth ", groundtruth_test[0]
     words_test = [ map(lambda t: idx2word[t], w) for w in test_lex ]
     test_precision, test_recall, test_f1score = conlleval(predictions_test, groundtruth_test, words_test)
-
-    print test_precision, test_recall, test_f1score
-
+    print "Test Results ", test_precision, test_recall, test_f1score
 
 
 if __name__ == '__main__':
