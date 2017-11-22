@@ -148,7 +148,7 @@ class MyNNClassifier(Classifier):
                                   , requires_grad=False
                          )
         optimizer = optim.Adam(model.parameters(), lr=0.0005)
-        for epoch in range(1000):
+        for epoch in range(10000):
             probs = model(words)
             loss = loss_function(probs, label)
             print "loss ", loss.data[0], " epoch ", epoch
@@ -270,17 +270,17 @@ def main():
     # print "Training results ", train_precision, train_recall, train_f1score
 
 
-    predictions_valid = [ map(lambda t: idx2label[t],
-     myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in valid_lex]
-    # print "predictions ", predictions_valid[0]
-    groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
-    # print "groundtruth ", groundtruth_valid[0]
-    words_valid = [ map(lambda t: idx2word[t], w) for w in valid_lex ]
-    valid_precision, valid_recall, valid_f1score = conlleval(predictions_valid, groundtruth_valid, words_valid)
-    print "Validation results ", valid_precision, valid_recall, valid_f1score
+    # predictions_valid = [ map(lambda t: idx2label[t],
+    #  myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in valid_lex]
+    # # print "predictions ", predictions_valid[0]
+    # groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
+    # # print "groundtruth ", groundtruth_valid[0]
+    # words_valid = [ map(lambda t: idx2word[t], w) for w in valid_lex ]
+    # valid_precision, valid_recall, valid_f1score = conlleval(predictions_valid, groundtruth_valid, words_valid)
+    # print "Validation results ", valid_precision, valid_recall, valid_f1score
 
     predictions_test = [ map(lambda t: idx2label[t],
-     myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in test_lex]
+     myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS)) for x in test_lex]
     # print "predictions ", predictions_test[0]
     groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
     # print "groundtruth ", groundtruth_test[0]
