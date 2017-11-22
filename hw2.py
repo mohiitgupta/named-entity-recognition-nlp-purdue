@@ -127,10 +127,10 @@ class MyNNClassifier(Classifier):
     def __init__(self):
         pass
 
-    def train(self, word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE):
+    def train(self, model, word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE):
         word_embedding_list, label_list = create_embedding_matrix(word_embeddings,
          tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
-        HIDDEN_NODES = 1000
+        HIDDEN_NODES = 450
         word_embedding_list = torch.stack(word_embedding_list)
         word_embedding_list = torch.squeeze(word_embedding_list)
         label_list = torch.stack(label_list)
@@ -140,7 +140,7 @@ class MyNNClassifier(Classifier):
         print "word_embeddings ", word_embedding_list.size()
         print "label list ", label_list.size()
 
-        model = NeuralNet(NUM_INPUT_NODES, HIDDEN_NODES, NUM_LABELS)
+        # model = NeuralNet(NUM_INPUT_NODES, HIDDEN_NODES, NUM_LABELS)
         loss_function = nn.MSELoss()
         # loss_function = nn.CrossEntropyLoss()
         # optimizer = optim.SGD(model.parameters(), lr=0.01
@@ -153,7 +153,7 @@ class MyNNClassifier(Classifier):
         optimizer = optim.Adam(model.parameters(), lr=0.0005
             # , weight_decay=0.00001
             )
-        for epoch in range(1202):
+        for epoch in range(2002, 4002):
             probs = model(words)
             loss = loss_function(probs, label)
             print "loss ", loss.data[0], " epoch ", epoch
@@ -257,18 +257,18 @@ def main():
     #Note : Takes around 1 hour to train the model with 1200 epochs and final MSE loss of around 0.0002
     '''
     # word_embeddings = torch.rand(VOCAB_SIZE+1, 300)
-    word_embeddings = torch.load('word_embeddings.pt')
-    #     word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
-    tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
-    model = myNNClassifier.train(word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
+    # word_embeddings = torch.load('word_embeddings.pt')
+    # #     word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
+    # tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
+    # model = myNNClassifier.train(word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
 
     #for using pretrained model
-    # word_embeddings = torch.load('word_embeddings.pt')
-    # # word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
-    # tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
-    # model = NeuralNet(728, 1000, NUM_LABELS) 
-    # model.load_state_dict(torch.load('parameters_1.pt'))
-    # myNNClassifier.train(model, word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
+    word_embeddings = torch.load('word_embeddings.pt')
+    # word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
+    tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
+    model = NeuralNet(728, 450, NUM_LABELS) 
+    model.load_state_dict(torch.load('parameters_2001.pt'))
+    model = myNNClassifier.train(model, word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
     # print "model ", model.state_dict()
 
     '''
@@ -284,17 +284,17 @@ def main():
     # print "Training results ", train_precision, train_recall, train_f1score
 
 
-    # predictions_valid = [ map(lambda t: idx2label[t],
-    #  myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in valid_lex]
-    # # print "predictions ", predictions_valid[0]
-    # groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
-    # # print "groundtruth ", groundtruth_valid[0]
-    # words_valid = [ map(lambda t: idx2word[t], w) for w in valid_lex ]
-    # valid_precision, valid_recall, valid_f1score = conlleval(predictions_valid, groundtruth_valid, words_valid)
-    # print "Validation results ", valid_precision, valid_recall, valid_f1score
+    predictions_valid = [ map(lambda t: idx2label[t],
+     myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in valid_lex]
+    # print "predictions ", predictions_valid[0]
+    groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
+    # print "groundtruth ", groundtruth_valid[0]
+    words_valid = [ map(lambda t: idx2word[t], w) for w in valid_lex ]
+    valid_precision, valid_recall, valid_f1score = conlleval(predictions_valid, groundtruth_valid, words_valid)
+    print "Validation results ", valid_precision, valid_recall, valid_f1score
 
     predictions_test = [ map(lambda t: idx2label[t],
-     myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in test_lex]
+     myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in test_lex]
     # print "predictions ", predictions_test[0]
     groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
     # print "groundtruth ", groundtruth_test[0]
