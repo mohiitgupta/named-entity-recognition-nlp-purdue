@@ -96,8 +96,8 @@ def create_embedding_matrix(word_embeddings, tag_embeddings, train_lex, train_y,
             # label_tensor = torch.LongTensor([label.item()])
             # label_tensor = label_tensor.long()
             # label_list.append(label_tensor)
-    print "word embedding list ", len(word_embedding_list)
-    print "label list ", len(label_list)
+    # print "word embedding list ", len(word_embedding_list)
+    # print "label list ", len(label_list)
     return word_embedding_list, label_list
 
 def get_input_vector(word_embeddings, prev_label, word, prev_word):
@@ -173,17 +173,15 @@ class MyNNClassifier(Classifier):
         output_labels = np.zeros(len(sentence))
         prev_label = tag_embeddings[NUM_LABELS]
         prev_word = word_embeddings[VOCAB_SIZE]
-        # prob_list = []
         for i, word in enumerate(sentence):
             input_vector =  get_input_vector(word_embeddings, prev_label, word, prev_word)
             probs = model(input_vector)
-            # prob_list.append(probs)
             max_val, predicted_label = torch.max(probs, 1)
             predicted_label = predicted_label.data[0]
             prev_label = tag_embeddings[predicted_label]
             output_labels[i] = predicted_label
             prev_word = word_embeddings[word]
-        # print output_labels
+        print output_labels
         return output_labels
 
     def viterbi_inference(self, model, sentence, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE):
@@ -197,8 +195,7 @@ class MyNNClassifier(Classifier):
                 input_vector = get_input_vector(word_embeddings, tag_embeddings[NUM_LABELS], sentence[i], prev_word)
                 probs = model(input_vector)
                 probs = probs.data.numpy()
-                word_table[:,0] = np.multiply(dp[0, 0], probs)
-                dp[:,i+1] = word_table[:,0]
+                dp[:,i+1] = probs
                 back_pointers[:,i] = 128
                 prev_word = word_embeddings[sentence[i]]
                 continue
@@ -206,24 +203,21 @@ class MyNNClassifier(Classifier):
                 input_vector = get_input_vector(word_embeddings, tag_embeddings[j], sentence[i], prev_word)
                 probs = model(input_vector)
                 probs = probs.data.numpy()
-                word_table[:,j] = np.multiply(dp[j, i], probs)
+                word_table[:,j] = probs
             prev_word = word_embeddings[sentence[i]]
+            word_table = np.multiply(word_table, dp[:,i, np.newaxis])
             dp[:,i+1] = word_table.max(1)
-            for k in range(NUM_LABELS):
-                for index, element in enumerate(word_table[k]):
-                    if element == dp[k, i+1]:
-                        back_pointers[k, i] = index
+            back_pointers[:, i] = word_table.argmax(1)
         output_labels = np.zeros(len(sentence), dtype = np.int)
         label_index = len(sentence) - 1
-        max_val = dp[:, len(sentence)].max()
-        for index, element in enumerate(dp[:, len(sentence)]):
-            if element == max_val:
-                output_labels[label_index] = index
-                break
+        output_labels[label_index] = dp[:, len(sentence)].argmax()
         for i in range(len(sentence)-1, 0, -1): #for example 18 to 1
             row = back_pointers[output_labels[label_index], i]
             label_index -= 1
             output_labels[label_index] = row
+        print back_pointers
+        print dp
+        print output_labels
         return output_labels
 
 def main():
@@ -267,8 +261,7 @@ def main():
     # word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
     tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
     model = NeuralNet(728, 450, NUM_LABELS) 
-    model.load_state_dict(torch.load('parameters_2001.pt'))
-    model = myNNClassifier.train(model, word_embeddings, tag_embeddings, train_lex, train_y, NUM_LABELS, VOCAB_SIZE)
+    model.load_state_dict(torch.load('parameters_2601.pt'))
     # print "model ", model.state_dict()
 
     '''
@@ -285,7 +278,9 @@ def main():
 
 
     predictions_valid = [ map(lambda t: idx2label[t],
-     myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in valid_lex]
+     myNNClassifier.viterbi_inference(model, valid_lex[0], word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE))
+      # for x in valid_lex
+      ]
     # print "predictions ", predictions_valid[0]
     groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
     # print "groundtruth ", groundtruth_valid[0]
@@ -293,14 +288,14 @@ def main():
     valid_precision, valid_recall, valid_f1score = conlleval(predictions_valid, groundtruth_valid, words_valid)
     print "Validation results ", valid_precision, valid_recall, valid_f1score
 
-    predictions_test = [ map(lambda t: idx2label[t],
-     myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in test_lex]
-    # print "predictions ", predictions_test[0]
-    groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
-    # print "groundtruth ", groundtruth_test[0]
-    words_test = [ map(lambda t: idx2word[t], w) for w in test_lex ]
-    test_precision, test_recall, test_f1score = conlleval(predictions_test, groundtruth_test, words_test)
-    print "Test Results ", test_precision, test_recall, test_f1score
+    # predictions_test = [ map(lambda t: idx2label[t],
+    #  myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in test_lex]
+    # # print "predictions ", predictions_test[0]
+    # groundtruth_test = [ map(lambda t: idx2label[t], y) for y in test_y ]
+    # # print "groundtruth ", groundtruth_test[0]
+    # words_test = [ map(lambda t: idx2word[t], w) for w in test_lex ]
+    # test_precision, test_recall, test_f1score = conlleval(predictions_test, groundtruth_test, words_test)
+    # print "Test Results ", test_precision, test_recall, test_f1score
 
 
 if __name__ == '__main__':
