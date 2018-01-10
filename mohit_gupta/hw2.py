@@ -136,9 +136,9 @@ class MyNNClassifier(Classifier):
         label_list = torch.stack(label_list)
         label_list = torch.squeeze(label_list)
         NUM_INPUT_NODES = word_embedding_list[0].size()[0]
-        print "number of input nodes ", NUM_INPUT_NODES
-        print "word_embeddings ", word_embedding_list.size()
-        print "label list ", label_list.size()
+        # print "number of input nodes ", NUM_INPUT_NODES
+        # print "word_embeddings ", word_embedding_list.size()
+        # print "label list ", label_list.size()
 
         model = NeuralNet(NUM_INPUT_NODES, HIDDEN_NODES, NUM_LABELS)
         loss_function = nn.MSELoss()
@@ -161,7 +161,7 @@ class MyNNClassifier(Classifier):
             loss.backward()
             optimizer.step()
 
-        torch.save(model.state_dict(), 'parameters' + str(epoch) + '.pt')
+        torch.save(model.state_dict(), 'parameters.pt')
         torch.save(word_embeddings, 'word_embeddings.pt')
 
         return model
@@ -254,8 +254,8 @@ def main():
     '''
     implement you training loop here
     #Note : Takes around 3 hours to train the model with 3600 epochs and corresponding MSE loss of around 0.0001626
+    Uncomment below lines to train the model
     '''
-    # word_embeddings = torch.rand(VOCAB_SIZE+1, 300)
     # word_embeddings = torch.load('word_embeddings.pt')
     # #     word_embeddings = torch.eye(VOCAB_SIZE, VOCAB_SIZE)
     # tag_embeddings = torch.eye(NUM_LABELS+1, NUM_LABELS+1)
@@ -273,7 +273,7 @@ def main():
     how to get f1 score using my functions, you can use it in the validation and training as well
     '''
     # predictions_train = [ map(lambda t: idx2label[t],
-    #  myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in train_lex]
+    #  myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE)) for x in train_lex]
     # # print "predictions ", predictions_train[0]
     # groundtruth_train = [ map(lambda t: idx2label[t], y) for y in train_y ]
     # # print "groundtruth ", groundtruth_train[0]
@@ -283,7 +283,7 @@ def main():
 
 
     # predictions_valid = [ map(lambda t: idx2label[t],
-    #  myNNClassifier.greedy_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE))for x in valid_lex]
+    #  myNNClassifier.viterbi_inference(model, x, word_embeddings, tag_embeddings, NUM_LABELS, VOCAB_SIZE))for x in valid_lex]
     # # print "predictions ", predictions_valid[0]
     # groundtruth_valid = [ map(lambda t: idx2label[t], y) for y in valid_y ]
     # # print "groundtruth ", groundtruth_valid[0]
