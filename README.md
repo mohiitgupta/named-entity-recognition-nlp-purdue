@@ -2,7 +2,7 @@
 course project on identification of named entity recognition using deep max entropy markov model
 
 The final code is in the folder mohit_gupta.
-Kindly take a look at this folder. A detailed analysis is given in report.pdf.
+Kindly take a look at this folder. A detailed analysis is given in hw2.pdf.
 
 Instructions for Running the code are:
 
